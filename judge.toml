@@ -1,5 +1,5 @@
 [jobs.c0]
 image = {source = "dockerfile", path = ".", tag = "c0-java"}
 run = [
-  "java ./target/com.company.Main $input $output",
+  "java ./com.company.Main $input $output",
 ]
