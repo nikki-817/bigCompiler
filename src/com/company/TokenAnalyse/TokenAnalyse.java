@@ -576,6 +576,7 @@ public class TokenAnalyse {
             while (in != null) {
                 this.input.add(in + "\n");
                 in = br.readLine();
+                System.out.println(in);
             }
         } catch (Exception e) {
             e.printStackTrace();
