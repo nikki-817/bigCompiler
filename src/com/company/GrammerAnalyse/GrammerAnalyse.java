@@ -50,7 +50,7 @@ public class GrammerAnalyse {
                     throw err.get();
                 } catch (Exception e) {
                     e.printStackTrace();
-                    System.exit(-1);
+                    //System.exit(-1);
                 }
             }
             ins.generateCode(table, out);
@@ -60,7 +60,7 @@ public class GrammerAnalyse {
                 throw tk.second.get();
             } catch (Exception e) {
                 e.printStackTrace();
-                System.exit(-1);
+                //System.exit(-1);
             }
         }
     }
