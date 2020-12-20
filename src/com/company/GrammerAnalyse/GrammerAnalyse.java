@@ -50,7 +50,7 @@ public class GrammerAnalyse {
                     throw err.get();
                 } catch (Exception e) {
                     e.printStackTrace();
-                    //System.exit(-1);
+                    System.exit(-1);
                 }
             }
             ins.generateCode(table, out);
@@ -60,7 +60,7 @@ public class GrammerAnalyse {
                 throw tk.second.get();
             } catch (Exception e) {
                 e.printStackTrace();
-                //System.exit(-1);
+                System.exit(-1);
             }
         }
     }
@@ -129,8 +129,8 @@ public class GrammerAnalyse {
                     if (next.getTokenKind() != TokenKind.ASSIGN)
                         return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "常量要赋值")), 0);
                     // 如果是'='，分析表达式，并将结果填入符号表
-                    ++count;
                     transInsert(tokenName, orgType, true, count);
+                    ++count;
                     next = NextToken().first.get();
                     if (next.getTokenKind() == TokenKind.SEMICOLON)
                         break;
@@ -138,13 +138,11 @@ public class GrammerAnalyse {
                 } else {
                     // 未赋值的情况
                     if (next.getTokenKind() != TokenKind.ASSIGN) {
-                        // 未赋值赋初值0
-                        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
                         if (next.getTokenKind() == TokenKind.SEMICOLON) {
-                            ++count;
                             if(table.getCurrentLevel() == 0)
                                 table.insertGlobalConst(tokenName, 'I', "0", false);
                             table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.VARIABLE, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType), count));
+                            ++count;
                             int level = table.getCurrentLevel();
                             if (level == 0){
                                 //全局变量
