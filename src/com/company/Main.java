@@ -12,8 +12,8 @@ public class Main {
     public static void main(String[] args){
         GrammerAnalyse grammerAnalyser = new GrammerAnalyse();
         try {
-            grammerAnalyser.DoGrammerAnalyse("E:\\compile\\bigCompiler\\test.txt", "output.o0");
-            //grammerAnalyser.DoGrammerAnalyse(args[0], args[1]);
+            //grammerAnalyser.DoGrammerAnalyse("E:\\compile\\bigCompiler\\test.txt", "output.o0");
+            grammerAnalyser.DoGrammerAnalyse(args[0], args[1]);
         } catch (IOException e) {
             e.printStackTrace();
         }
