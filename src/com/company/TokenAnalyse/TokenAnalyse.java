@@ -433,6 +433,8 @@ public class TokenAnalyse {
                             tkStr.append("\\");
                         else if (nextChar == '\"')
                             tkStr.append("\"");
+                        else if (nextChar == '\'')
+                            tkStr.append("\'");
                         else
                             return new Pair<>(Optional.empty(), Optional.of(new TokenError(posToken.getRow(), posToken.getCol(), "错误的字符串字面量")));
                     } else {
