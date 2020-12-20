@@ -60,6 +60,7 @@ public class GrammerAnalyse {
                 throw tk.second.get();
             } catch (Exception e) {
                 e.printStackTrace();
+                System.exit(-1);
             }
         }
     }
