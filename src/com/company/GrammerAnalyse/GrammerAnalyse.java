@@ -720,8 +720,13 @@ public class GrammerAnalyse {
         int pre = 1;
         if (next.getTokenKind() != TokenKind.PLUS && next.getTokenKind() != TokenKind.MINUS)
             UnreadToken();
-        else if (next.getTokenKind() == TokenKind.MINUS)
-            pre = -1;
+        else {
+            while (next.getTokenKind() == TokenKind.MINUS){
+                pre *= -1;
+                next = NextToken().first.get();
+            }
+            UnreadToken();
+        }
         next = NextToken().first.get();
         switch (next.getTokenKind()) {
             case IDENT: {
