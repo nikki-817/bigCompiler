@@ -12,7 +12,7 @@ public class globalFunctions{
     private RtnType rtnType;
     private ArrayList<ArgsInfo> args = new ArrayList<>();
     private String name;
-    private  int count;
+    private  int count; //局部变量的数量
 
 
     public globalFunctions(int index, int name_index, int params_size, int level, ArrayList<ArgsInfo> args, int localsLen, RtnType type, String name) {

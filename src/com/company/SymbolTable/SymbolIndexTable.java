@@ -50,11 +50,9 @@ public class SymbolIndexTable {
 
     // 向符号表中加入符号
     public void insertSymbol(String name, SymbolEntry symbolEntry) {
-        int offset = -1; // -1存放函数的声明
-        if (symbolEntry.getType() != SymbolType.FUNCTION) {
-            offset = this.table.nextOffset;
+        if (symbolEntry.getType() == SymbolType.FUNCTION) {
+            int offset = -1; // -1存放函数的声明
             symbolEntry.setOffset(offset);
-            this.table.nextOffset++;
         }
         this.table.symbols.put(name, symbolEntry);
     }
@@ -78,17 +76,26 @@ public class SymbolIndexTable {
     }
 
     public void insertGlobalFunc(String name, int params_size, int level, ArrayList<ArgsInfo> args, int localsLen, RtnType type) {
-        int index = gblFuncTable.size();
+        int index = gblFuncTable.size() + 1;
         int nameIndex = mapConst.get(name);
         mapFunc.put(name, index);
         gblFuncTable.add(new globalFunctions(index, nameIndex, params_size, level, args, localsLen, type, name));
+    }
+
+    public void InsertStart(){
+        insertGlobalConst("_start", 'S', "_start", true);
+        int nameIndex = mapConst.get("_start");
+        int index = 0;
+        mapFunc.put("_start", index);
+        gblFuncTable.add(new globalFunctions(index, nameIndex, 0, 0, null, 0, RtnType.VOID, "_start"));
+        gblFuncTable.add(0, gblFuncTable.remove(gblFuncTable.size() - 1));
     }
 
     public globalFunctions getGlobalFunc(String name) {
         if(mapFunc.get(name) == null)
             return null;
         else
-            return gblFuncTable.get(mapFunc.get(name));
+            return gblFuncTable.get(mapFunc.get(name) - 1);
     }
 
     // 找某个标识符，从本模块往上模块找

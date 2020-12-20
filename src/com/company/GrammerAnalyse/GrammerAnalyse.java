@@ -53,6 +53,8 @@ public class GrammerAnalyse {
                     System.exit(-1);
                 }
             }
+            ins.generateCode(table, out);
+            System.out.println("编译成功!");
         } else {
             try {
                 throw tk.second.get();
@@ -127,7 +129,7 @@ public class GrammerAnalyse {
                         return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "常量要赋值")), 0);
                     // 如果是'='，分析表达式，并将结果填入符号表
                     ++count;
-                    transInsert(tokenName, orgType, true);
+                    transInsert(tokenName, orgType, true, count);
                     next = NextToken().first.get();
                     if (next.getTokenKind() == TokenKind.SEMICOLON)
                         break;
@@ -136,18 +138,29 @@ public class GrammerAnalyse {
                     // 未赋值的情况
                     if (next.getTokenKind() != TokenKind.ASSIGN) {
                         // 未赋值赋初值0
-                        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
+                        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
                         if (next.getTokenKind() == TokenKind.SEMICOLON) {
                             ++count;
                             if(table.getCurrentLevel() == 0)
                                 table.insertGlobalConst(tokenName, 'I', "0", false);
-                            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.VARIABLE, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType)));
+                            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.VARIABLE, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType), count));
+                            int level = table.getCurrentLevel();
+                            if (level == 0){
+                                //全局变量
+                                int offset = table.getGlobalConst(tokenName).getIndex();
+                                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.GLOBA, offset, 0);
+                            }
+                            else {
+                                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOCA, (long)table.findSymbol(tokenName).getOffset(), 0);
+                            }
+                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
+                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STORE64, 0, 0);
                             break;
                         }
                         return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "错误的声明")), 0);
                     } else {
                         // 赋值的情况
-                        transInsert(tokenName, orgType, false);
+                        transInsert(tokenName, orgType, false, count);
                         next = NextToken().first.get();
                         if (next.getTokenKind() == TokenKind.SEMICOLON){
                             ++count;
@@ -332,6 +345,8 @@ public class GrammerAnalyse {
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.L_PAREN)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少("));
+        if (func.getRtnType() != RtnType.VOID)
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STACKALLOC, 1L, 0);
         int argc = 0;
         // 预读,可能是')'或者传的实参值
         next = NextToken().first.get();
@@ -356,7 +371,7 @@ public class GrammerAnalyse {
         else if (argc < func.getParams_size())
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "参数错误,输入参数过少"));
         else {
-            //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CALL, func.getIndex(), 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CALL, (long)func.getIndex(), 0);
             return Optional.empty();
         }
 
@@ -371,13 +386,26 @@ public class GrammerAnalyse {
         SymbolEntry find = table.findSymbol(next.getValStr());
         if (find == null)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "标识符未定义,无法赋值"));
-        // 先把标识符的地址找到，再把表达式的值赋给它
-        int level = find.getLevel();
-        int offset = getOffset(find);
-        // 从符号表中获取层级和偏移，生成load指令获取地址
-        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOADA, level == 0 ? 1 : 0, offset);
         if (find.getType() == SymbolType.FUNCTION || find.getType() == SymbolType.CONSTANT || find.getType() == SymbolType.CONSTARGUMENTS)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "函数和常量无法赋值"));
+        // 先把标识符的地址找到，再把表达式的值赋给它
+        int level = find.getLevel();
+        //int offset = getOffset(find);
+        // 从符号表中获取层级和偏移，生成load指令获取地址
+        if (level == 0){
+            //全局变量
+            int offset = table.getGlobalConst(find.getName()).getIndex();
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.GLOBA, (long)offset, 0);
+        }
+        else {
+            //函数参数和局部变量
+            if (find.getType() == SymbolType.ARGUMENTS || find.getType() == SymbolType.CONSTARGUMENTS){
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ARGA, (long)find.getOffset(), 0);
+            }
+            else{
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOCA, (long)find.getOffset(), 0);
+            }
+        }
         // 读入赋值号
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.ASSIGN)
@@ -385,7 +413,7 @@ public class GrammerAnalyse {
         Optional<Exception> err = AnalyseExpression();
         if (err.isPresent())
             return Optional.of(err.get());
-        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ISTORE, 0, 0);
+        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STORE64, 0, 0);
         return Optional.empty();
     }
 
@@ -400,16 +428,18 @@ public class GrammerAnalyse {
             UnreadToken();
             if (context.getRtnType() != RtnType.VOID)
                 return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "应该有返回值"));
-            //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.RET, 0, 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.RET, 0, 0);
         } else {
             UnreadToken();
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ARGA, 0, 0);
             // 表达式
             Optional<Exception> err = AnalyseExpression();
             if (err.isPresent())
                 return Optional.of(err.get());
             if (context.getRtnType() == RtnType.VOID)
                 return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "返回类型不能为空"));
-            //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IRET, 0, 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STORE64, 0, 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.RET, 0, 0);
         }
         return Optional.empty();
     }
@@ -457,7 +487,7 @@ public class GrammerAnalyse {
                 if (next.getTokenKind() != TokenKind.R_BRACE)
                     return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少}")));
                 // 弹出所有的局部变量
-                for (int i = 0; i < table.getOffset(); i++)
+                //for (int i = 0; i < table.getOffset(); i++)
                     //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.POP, 0, 0);
                 // 回退层次，删除符号表
                 try {
@@ -557,22 +587,22 @@ public class GrammerAnalyse {
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.L_PAREN)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少("));
-        while(true){
             //读入int
-            next = NextToken().first.get();
-            if (next.getTokenKind() == TokenKind.INT_LITERAL){
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPUSH, next.getValInt(), 0);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CPRINT, 0, 0);
-            }
-            else if(next.getTokenKind() == TokenKind.R_PAREN)
-                break;
-            else{
-                UnreadToken();
-                Optional<Exception> err = AnalyseExpression();
-                if (err.isPresent())
-                    return Optional.of(err.get());
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPRINT, 0, 0);
-            }
+        next = NextToken().first.get();
+        if (next.getTokenKind() == TokenKind.INT_LITERAL){
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, (long)next.getValInt(), 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTI, 0, 0);
+        }
+        else{
+            UnreadToken();
+            Optional<Exception> err = AnalyseExpression();
+            if (err.isPresent())
+                return Optional.of(err.get());
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTI, 0, 0);
+        }
+        next = NextToken().first.get();
+        if (next.getTokenKind() != TokenKind.R_PAREN){
+            return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少)"));
         }
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.SEMICOLON)
@@ -590,27 +620,25 @@ public class GrammerAnalyse {
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.L_PAREN)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少("));
-        while(true){
-            //读入int
-            next = NextToken().first.get();
-            if (next.getTokenKind() == TokenKind.INT_LITERAL){
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPUSH, next.getValInt(), 0);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CPRINT, 0, 0);
-            }
-            else if(next.getTokenKind() == TokenKind.R_PAREN)
-                break;
-            else{
-                UnreadToken();
-                Optional<Exception> err = AnalyseExpression();
-                if (err.isPresent())
-                    return Optional.of(err.get());
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPRINT, 0, 0);
-            }
+        //读入int
+        next = NextToken().first.get();
+        if (next.getTokenKind() == TokenKind.INT_LITERAL){
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, (long)next.getValInt(), 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTC, 0, 0);
         }
+        else{
+            UnreadToken();
+            Optional<Exception> err = AnalyseExpression();
+            if (err.isPresent())
+                return Optional.of(err.get());
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTC, 0, 0);
+        }
+        next = NextToken().first.get();
+        if(next.getTokenKind() != TokenKind.R_PAREN)
+            return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少）"));
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.SEMICOLON)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少分号"));
-        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTL, 0, 0);
         return Optional.empty();
     }
 
@@ -623,31 +651,30 @@ public class GrammerAnalyse {
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.L_PAREN)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少("));
-        while(true){
-            //读入int
-            next = NextToken().first.get();
-            if (next.getTokenKind() == TokenKind.INT_LITERAL){
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPUSH, next.getValInt(), 0);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CPRINT, 0, 0);
-            }
-            else if(next.getTokenKind() == TokenKind.R_PAREN)
-                break;
-            else if (next.getTokenKind() == TokenKind.STRING_LITERAL) {
-                String val = next.getValStr();
-                if (table.getGlobalConst(val) == null)
-                    table.insertGlobalConst(val, 'S', val, true);
-                globalConstants con = table.getGlobalConst(val);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOADC, con.getIndex(), 0);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.SPRINT, 0, 0);
-            }
-            else{
-                UnreadToken();
-                Optional<Exception> err = AnalyseExpression();
-                if (err.isPresent())
-                    return Optional.of(err.get());
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPRINT, 0, 0);
-            }
+        //读入int
+        next = NextToken().first.get();
+        if (next.getTokenKind() == TokenKind.INT_LITERAL){
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, (long)next.getValInt(), 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTS, 0, 0);
         }
+        else if (next.getTokenKind() == TokenKind.STRING_LITERAL) {
+            String val = next.getValStr();
+            if (table.getGlobalConst(val) == null)
+                table.insertGlobalConst(val, 'S', val, true);
+            globalConstants con = table.getGlobalConst(val);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, (long)con.getIndex(), 0);
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTS, 0, 0);
+        }
+        else{
+            UnreadToken();
+            Optional<Exception> err = AnalyseExpression();
+            if (err.isPresent())
+                return Optional.of(err.get());
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTS, 0, 0);
+        }
+        next = NextToken().first.get();
+        if (next.getTokenKind() != TokenKind.R_PAREN)
+            return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少)"));
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.SEMICOLON)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少分号"));
@@ -671,7 +698,7 @@ public class GrammerAnalyse {
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.SEMICOLON)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少分号"));
-        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTL, 0, 0);
+        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PRINTLN, 0, 0);
         return Optional.empty();
     }
 
@@ -722,18 +749,22 @@ public class GrammerAnalyse {
                         // 生成指令，判断是常量还是变量分别处理
                     else {
                         int level = entry.getLevel();
-                        int offset = getOffset(entry);
                         // 从符号表中获取层级和偏移，生成load指令获取地址
                         if (level == 0){
-                            offset = table.getGlobalFunc(org.getValStr()).getIndex();
-                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.GLOBA, offset, 0);
+                            //全局变量
+                            int offset = table.getGlobalConst(entry.getName()).getIndex();
+                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.GLOBA, (long)offset, 0);
                         }
                         else {
-                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOCA, offset, 0);
+                            //函数参数和局部变量
+                            if (entry.getType() == SymbolType.ARGUMENTS || entry.getType() == SymbolType.CONSTARGUMENTS){
+                                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ARGA, (long)entry.getOffset(), 0);
+                            }
+                            else{
+                                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOCA, (long)entry.getOffset(), 0);
+                            }
                         }
-                        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOADA, level == 0 ? 1 : 0, offset);
-                        // 根据已经加载到栈顶的地址获取值
-                        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ILOAD, 0, 0);
+                        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOAD64, 0, 0);
                     }
                 }
                 break;
@@ -747,11 +778,7 @@ public class GrammerAnalyse {
                 next = NextToken().first.get();
                 if (next.getTokenKind() != TokenKind.R_PAREN)
                     return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少)"));
-                //int offset = getOffset(find);
-                //int level = find.getLevel();
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOADA, level == 0 ? 1 : 0, offset);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ISCAN, 0, 0);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ISTORE, 0, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.SCANI,0, 0);
                 break;
             case GETCHAR:
                 next = NextToken().first.get();
@@ -761,11 +788,7 @@ public class GrammerAnalyse {
                 next = NextToken().first.get();
                 if (next.getTokenKind() != TokenKind.R_PAREN)
                     return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少)"));
-                //int offset = getOffset(find);
-                //int level = find.getLevel();
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOADA, level == 0 ? 1 : 0, offset);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ISCAN, 0, 0);
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ISTORE, 0, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.SCANC,0, 0);
                 break;
             case L_PAREN:
                 Optional<Exception> err = AnalyseExpression();
@@ -778,7 +801,7 @@ public class GrammerAnalyse {
             case INT_LITERAL:
                 val = next.getValInt();
                 // 入栈常量
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPUSH, pre * val, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, (long)pre * val, 0);
                 break;
             default:
                 return Optional.of(new TokenError(next.getRowNum(), next.getColNum(), "因子分析错误"));
@@ -813,6 +836,7 @@ public class GrammerAnalyse {
     }
 
     private Pair<Optional<ArrayList<ArgsInfo>>, Optional<Exception>> AnalyseArguments() {
+        int index = 1;
         // 读入'('
         ArrayList<ArgsInfo> args = new ArrayList<>();
         Token next = NextToken().first.get();
@@ -860,13 +884,14 @@ public class GrammerAnalyse {
                 default:
                     return new Pair<>(Optional.empty(), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "未知错误")));
             }
-            ArgsInfo argsInfo = new ArgsInfo(isConstant, valType, identName);
+            ArgsInfo argsInfo = new ArgsInfo(isConstant, valType, identName, index);
             args.add(argsInfo);
             // 参数插入符号表，注意函数的参数可能是常量，需要保存
             if (isConstant)
-                table.insertSymbol(identName, new SymbolEntry(identName, 0, SymbolType.CONSTARGUMENTS, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(type)));
+                table.insertSymbol(identName, new SymbolEntry(identName, 0, SymbolType.CONSTARGUMENTS, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(type), index));
             else
-                table.insertSymbol(identName, new SymbolEntry(identName, 0, SymbolType.ARGUMENTS, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(type)));
+                table.insertSymbol(identName, new SymbolEntry(identName, 0, SymbolType.ARGUMENTS, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(type), index));
+            ++index;
             // 看是右括号还是','
             next = NextToken().first.get();
             if (next.getTokenKind() == TokenKind.R_PAREN) {
@@ -895,7 +920,7 @@ public class GrammerAnalyse {
             if (next.getTokenKind() == TokenKind.PLUS)
                type = InstructionType.ADDI;
             else
-                type = InstructionType.DIVI;
+                type = InstructionType.SUBI;
             err = AnalyseItem();
             if (err.isPresent())
                 return err;
@@ -905,7 +930,7 @@ public class GrammerAnalyse {
 
     private Optional<Exception> AnalyseFunctionDefinition() {
         while (true) {
-            //ins.clearOffset();
+            ins.clearOffset();
             // 读入函数返回类型
             Token next = NextToken().first.get();
             if (next.isEOF())
@@ -917,7 +942,7 @@ public class GrammerAnalyse {
             if (next.getTokenKind() != TokenKind.IDENT)
                 return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少函数名"));
             String funcName = next.getValStr();
-            table.insertGlobalConst(funcName, 'S', funcName, false);
+            table.insertGlobalConst(funcName, 'S', funcName, true);
             // 不能重复定义函数
             if (table.isDuplicate(funcName))
                 return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "重复的定义"));
@@ -970,29 +995,33 @@ public class GrammerAnalyse {
                 e.printStackTrace();
             }
             // 防止未返回行为
-            /*
             globalFunctions func = table.getGlobalFunc(funcName);
             if(func.getRtnType() == RtnType.VOID)
                 ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.RET, 0, 0);
             else{
                 // 如果没有返回的话，默认返回-19980711
-                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IPUSH, -19980711, 0);
-                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.IRET, 0, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.ARGA, 0, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, -19980711L, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STORE64, 0, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.RET, 0, 0);
             }
-             */
         }
     }
 
-    private void transInsert(String tokenName, TokenKind orgType, boolean isConstant) {
+    private void transInsert(String tokenName, TokenKind orgType, boolean isConstant, int locOffset) {
         if (isConstant)
-            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.CONSTANT, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType)));
+            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.CONSTANT, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType), locOffset));
         else
-            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.VARIABLE, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType)));
+            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.VARIABLE, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType), locOffset));
         SymbolEntry find = table.findSymbol(tokenName);
         int level = find.getLevel();
-        int offset = getOffset(find);
         if (level == 0){
             table.insertGlobalConst(tokenName, 'I', "0", isConstant);
+            int offset = table.getGlobalConst(tokenName).getIndex();
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.GLOBA, (long)offset, 0);
+        }
+        else {
+            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOCA, table.findSymbol(tokenName).getOffset(), 0);
         }
         // 从符号表中获取层级和偏移，生成load指令获取地址
         Optional<Exception> re = AnalyseExpression();
@@ -1002,6 +1031,7 @@ public class GrammerAnalyse {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STORE64, 0, 0);
     }
 
     private Pair<Optional<Token>, Optional<Exception>> NextToken() {
@@ -1015,23 +1045,5 @@ public class GrammerAnalyse {
         if (tokenIndex > 0)
             return new Pair<>(Optional.of(tkList.get(--tokenIndex)), Optional.empty());
         return new Pair<>(Optional.empty(), Optional.of(new TokenError(0, 0, "已经是最开始了，无法回退Token")));
-    }
-
-    private int getOffset(SymbolEntry entry) {
-        int level = entry.getLevel();
-        int offset = entry.getOffset();
-        try {
-            if (level != 0) {
-                for (int i = 1; i < level; i++) {
-                    table.previousLevelForSum();
-                    offset += table.getOffset();
-                }
-                for (int i = 1; i < level; i++)
-                    table.nextLevel();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return offset;
     }
 }

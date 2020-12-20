@@ -8,7 +8,7 @@ public class SymbolEntry {
     private String strVal;
     private SymbolType type;
     private int level;
-    private int offset;
+    private int offset; //记录是函数的第几个参数
     private ValType tkType;
     private boolean isChar;
     private boolean isInteger;
@@ -33,23 +33,6 @@ public class SymbolEntry {
         this.tkType = tkType;
         this.offset = offset;
         this.isInteger = true;
-    }
-
-    public SymbolEntry(String name, double doubleVal, SymbolType type, int level, ValType tkType) {
-        this.name = name;
-        this.doubleVal = doubleVal;
-        this.type = type;
-        this.level = level;
-        this.tkType = tkType;
-    }
-
-    public SymbolEntry(String name, char charVal, SymbolType type, int level, ValType tkType) {
-        this.name = name;
-        this.charVal = charVal;
-        this.type = type;
-        this.level = level;
-        this.tkType = tkType;
-        this.isChar = true;
     }
 
 
