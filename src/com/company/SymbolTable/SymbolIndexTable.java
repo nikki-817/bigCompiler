@@ -139,6 +139,14 @@ public class SymbolIndexTable {
         return table.nextOffset;
     }
 
+    public boolean functionExist(String name){
+        for (globalFunctions fun : gblFuncTable){
+            if (fun.getName().equals(name))
+                return true;
+        }
+        return false;
+    }
+
 
 }
 

@@ -71,6 +71,8 @@ public class GrammerAnalyse {
         if (err.isPresent())
             return err;
         err = AnalyseFunctionDefinition();
+        if (err.isPresent())
+            return err;
         boolean hasMain = false;
         for (globalFunctions f : table.getGblFuncTable()){
             if (f.getName().equals("main")){
@@ -952,7 +954,7 @@ public class GrammerAnalyse {
             String funcName = next.getValStr();
             table.insertGlobalConst(funcName, 'S', funcName, true);
             // 不能重复定义函数
-            if (table.isDuplicate(funcName))
+            if (table.isDuplicate(funcName) || table.functionExist(funcName))
                 return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "重复的定义"));
             // 进入下一层
             table.nextLevel();
