@@ -572,8 +572,8 @@ public class TokenAnalyse {
         }
         try {
             String in = br.readLine();
-
             while (in != null) {
+                System.out.println(in);
                 this.input.add(in + "\n");
                 in = br.readLine();
             }

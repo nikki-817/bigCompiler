@@ -533,6 +533,8 @@ public class GrammerAnalyse {
             case CONTINUE_KW:
                 // 设定jmp后两个参数都为-6，回填的时候知道这句话是continue
                 //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.JMP, -6, -6);
+                if (table.getCurrentLevel() < 2)
+                    return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "continue不在while内")));
                 next = NextToken().first.get();
                 if (next.getTokenKind() != TokenKind.SEMICOLON)
                     return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少分号")));
@@ -540,6 +542,8 @@ public class GrammerAnalyse {
             case BREAK_KW:
                 // 设定jmp后两个参数都为-9，回填时就知道这句话是break
                 //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.JMP, -9, -9);
+                if (table.getCurrentLevel() < 2)
+                    return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "break不在while内")));
                 next = NextToken().first.get();
                 if (next.getTokenKind() != TokenKind.SEMICOLON)
                     return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少分号")));
