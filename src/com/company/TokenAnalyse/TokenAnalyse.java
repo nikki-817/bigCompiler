@@ -278,6 +278,8 @@ public class TokenAnalyse {
                  */
                 case DIVSIGNSTATE: {
                     if (nextChar == '/') {
+                        if(pos.getRow() == input.size() - 1)
+                            return new Pair<>(Optional.empty(), Optional.of(new ErrEOF(posToken.getRow(), posToken.getCol(), "EOF")));
                         nextLine();
                         state = TokenAnalyseState.INITSTATE;
                         tkStr = new StringBuilder();
