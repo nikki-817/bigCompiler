@@ -210,7 +210,8 @@ public class GrammerAnalyse {
             return err1.second;
         // 获取跳转地址
         int trueJmpAddr = ins.getNextCodeOffset() - falseJmpAddr;
-        int noCon = ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, 0, 0);
+        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, 0, 0);
+        int noCon = ins.getCodeOffset();
         int finalJmpAddr = -1;
         // 看是否是else
         next = NextToken().first.get();
@@ -251,7 +252,8 @@ public class GrammerAnalyse {
                 UnreadToken();
                 ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
                 ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CMPI, 0, 0);
-                falseJpc = ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BRFALSE, 0, 0);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BRFALSE, 0, 0);
+                falseJpc = ins.getCodeOffset();
                 return new Pair<>(Optional.of(falseJpc), Optional.empty());
             default:
                 return new Pair<>(Optional.of(-1), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "错误的条件表达式")));
@@ -302,7 +304,7 @@ public class GrammerAnalyse {
         else
             UnreadToken();
         // 循环开始时地址
-        //int startAddr = ins.getCodeOffset();
+        int startAddr = ins.getCodeOffset();
         Pair<Optional<Integer>, Optional<Exception>> err = AnalyseConditionalStatement();
         if (err.second.isPresent())
             return Optional.of(err.second.get());
@@ -326,9 +328,9 @@ public class GrammerAnalyse {
         if (err1.second.isPresent())
             return err1.second;
         // 无条件跳回循环开始处
-        //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.JMP, startAddr, 0);
-        //int finalAddr = ins.getCodeOffset();
-        //ins.updateInstruction(falseJmpAddr, finalAddr, 0);
+        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, startAddr - (ins.getNextCodeOffset()), 0);
+        int finalAddr = ins.getCodeOffset();
+        ins.updateInstruction(falseJmpAddr, finalAddr - falseJmpAddr, 0);
         // 检查continue和break
         //ins.updateConBre(startAddr, finalAddr);
         return Optional.empty();
