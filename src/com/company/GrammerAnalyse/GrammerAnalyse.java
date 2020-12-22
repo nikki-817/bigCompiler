@@ -739,6 +739,9 @@ public class GrammerAnalyse {
             case IDENT: {
                 // 首先看这个标识符是否定义了
                 // 要把这个标识符的值给LIT到栈顶
+                if (pre == -1){
+                    ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0L, 0);
+                }
                 Token org = next;
                 next = NextToken().first.get();
                 if (next.getTokenKind() == TokenKind.L_PAREN) {
@@ -778,6 +781,8 @@ public class GrammerAnalyse {
                         ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOAD64, 0, 0);
                     }
                 }
+                if (pre == -1)
+                    ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.SUBI, 0, 0);
                 break;
             }
             case GETINT:
