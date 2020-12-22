@@ -981,6 +981,13 @@ public class GrammerAnalyse {
                 default:
                     return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "未知错误"));
             }
+            //没有返回值，参数的需要要全部减1
+            if (rtn_type == RtnType.VOID){
+                for (ArgsInfo item : arg.first.get()){
+                    SymbolEntry sym = table.findSymbol(item.getName());
+                    sym.setOffset( sym.getOffset() - 1);
+                }
+            }
             // 函数体
             next = NextToken().first.get();
             if (next.getTokenKind() != TokenKind.L_BRACE)
