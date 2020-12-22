@@ -252,8 +252,7 @@ public class GrammerAnalyse {
                 UnreadToken();
                 ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
                 ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.CMPI, 0, 0);
-                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BRFALSE, 0, 0);
-                falseJpc = ins.getCodeOffset();
+                falseJpc = ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BRFALSE, 0, 0);
                 return new Pair<>(Optional.of(falseJpc), Optional.empty());
             default:
                 return new Pair<>(Optional.of(-1), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "错误的条件表达式")));
