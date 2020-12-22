@@ -83,6 +83,10 @@ public class Instruction {
         insMap.put(InstructionType.PANIC, (byte)0xfe);
     }
 
+    public int getListSize() {
+        return instructionList.size();
+    }
+
     public int getNextCodeOffset() {
         return codeOffset + 1;
     }

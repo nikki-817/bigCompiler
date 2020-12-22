@@ -209,20 +209,20 @@ public class GrammerAnalyse {
         if (err1.second.isPresent())
             return err1.second;
         // 获取跳转地址
-        int trueJmpAddr = ins.getNextCodeOffset() - falseJmpAddr;
+        int trueJmpAddr = ins.getListSize() - falseJmpAddr;
         ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, 0, 0);
-        int noCon = ins.getCodeOffset();
+        int noCon = ins.getListSize() - 1;
         int finalJmpAddr = -1;
         // 看是否是else
         next = NextToken().first.get();
         if (next.getTokenKind() != TokenKind.ELSE_KW) {
             UnreadToken();
-            finalJmpAddr = ins.getCodeOffset() - noCon;
+            finalJmpAddr = ins.getListSize() - 1 - noCon;
         } else {
             err1 = AnalyseStatement();
             if (err1.second.isPresent())
                 return err1.second;
-            finalJmpAddr = ins.getCodeOffset() - noCon;
+            finalJmpAddr = ins.getListSize() - 1 - noCon;
         }
         ins.updateInstruction(noCon, finalJmpAddr, 0);
         ins.updateInstruction(falseJmpAddr, trueJmpAddr, 0);
@@ -304,7 +304,7 @@ public class GrammerAnalyse {
         else
             UnreadToken();
         // 循环开始时地址
-        int startAddr = ins.getCodeOffset();
+        int startAddr = ins.getListSize();
         Pair<Optional<Integer>, Optional<Exception>> err = AnalyseConditionalStatement();
         if (err.second.isPresent())
             return Optional.of(err.second.get());
@@ -328,8 +328,8 @@ public class GrammerAnalyse {
         if (err1.second.isPresent())
             return err1.second;
         // 无条件跳回循环开始处
-        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, startAddr - (ins.getNextCodeOffset()), 0);
-        int finalAddr = ins.getCodeOffset();
+        ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, startAddr - (ins.getListSize() + 1 ), 0);
+        int finalAddr = ins.getListSize() - 1;
         ins.updateInstruction(falseJmpAddr, finalAddr - falseJmpAddr, 0);
         // 检查continue和break
         //ins.updateConBre(startAddr, finalAddr);
