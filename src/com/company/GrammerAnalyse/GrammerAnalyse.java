@@ -331,7 +331,7 @@ public class GrammerAnalyse {
         int finalAddr = ins.getListSize() - 1;
         ins.updateInstruction(falseJmpAddr, finalAddr - falseJmpAddr, 0);
         // 检查continue和break
-        //ins.updateConBre(startAddr, finalAddr);
+        ins.updateConBre(startAddr, finalAddr);
         return Optional.empty();
     }
 
@@ -535,7 +535,7 @@ public class GrammerAnalyse {
                 break;
             case CONTINUE_KW:
                 // 设定jmp后两个参数都为-6，回填的时候知道这句话是continue
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.JMP, -6, -6);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, -6, -6, ins.getListSize() + 1);
                 if (table.getCurrentLevel() < 2)
                     return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "continue不在while内")));
                 next = NextToken().first.get();
@@ -544,7 +544,7 @@ public class GrammerAnalyse {
                 break;
             case BREAK_KW:
                 // 设定jmp后两个参数都为-9，回填时就知道这句话是break
-                //ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.JMP, -9, -9);
+                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.BR, -9, -9, ins.getListSize());
                 if (table.getCurrentLevel() < 2)
                     return new Pair<>(Optional.of(false), Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "break不在while内")));
                 next = NextToken().first.get();

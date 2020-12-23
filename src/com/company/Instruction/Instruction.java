@@ -15,12 +15,21 @@ class ins {
     InstructionType type;
     long op1;
     int op2;
+    int offset;
 
     ins(int index, InstructionType type, long op1, int op2) {
         this.type = type;
         this.op1 = op1;
         this.op2 = op2;
         this.index = index;
+    }
+
+    ins(int index, InstructionType type, long op1, int op2, int offset) {
+        this.type = type;
+        this.op1 = op1;
+        this.op2 = op2;
+        this.index = index;
+        this.offset = offset;
     }
 }
 
@@ -105,9 +114,29 @@ public class Instruction {
         return instructionList.size() - 1;
     }
 
+    public int pushBackInstruction(int insIndex, InstructionType type, long op1, int op2, int offset) {
+        instructionList.add(new ins(insIndex, type, op1, op2, offset));
+        this.codeOffset++;
+        return instructionList.size() - 1;
+    }
+
     public void updateInstruction(int org, int op1, int op2) {
         instructionList.get(org).op1 = op1;
         instructionList.get(org).op2 = op2;
+    }
+
+    public void updateConBre(int bgnOfs, int lstOfs){
+        for (int i = bgnOfs; i <= lstOfs; i++){
+            ins instruction = instructionList.get(i);
+            if(instruction.op2 == -6){
+                instruction.op1 = bgnOfs - instruction.offset;
+                instruction.op2 = 0;
+            }
+            else if(instruction.op2 == -9){
+                instruction.op1 = lstOfs - instruction.offset;
+                instruction.op2 = 0;
+            }
+        }
     }
 
     public void generateCode(SymbolIndexTable table, String out) throws IOException {
