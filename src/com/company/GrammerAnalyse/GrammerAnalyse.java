@@ -73,9 +73,23 @@ public class GrammerAnalyse {
         err = AnalyseVariableDeclaration().first;
         if (err.isPresent())
             return err;
-        err = AnalyseFunctionDefinition();
-        if (err.isPresent())
-            return err;
+        Token next = NextToken().first.get();
+        while (!next.isEOF()){
+            UnreadToken();
+            err = AnalyseFunctionDefinition();
+            if (err.isPresent())
+                return err;
+            UnreadToken();
+            next = NextToken().first.get();
+            if (next.isEOF()){
+                break;
+            }
+            err = AnalyseVariableDeclaration().first;
+            if (err.isPresent())
+                return err;
+            UnreadToken();
+            next = NextToken().first.get();
+        }
         boolean hasMain = false;
         for (globalFunctions f : table.getGblFuncTable()){
             if (f.getName().equals("main")){
@@ -544,6 +558,13 @@ public class GrammerAnalyse {
         TokenKind type = next.getTokenKind();
         Optional<Exception> err = null;
         switch (type) {
+            case LET_KW:
+            case CONST_KW:
+                UnreadToken();
+                err = AnalyseVariableDeclaration(funcName).first;
+                if (err.isPresent())
+                    return new Pair<>(Optional.of(false), Optional.of(err.get()));
+                break;
             case IF_KW:
                 UnreadToken();
                 err = AnalyseIfStatement(funcName);
