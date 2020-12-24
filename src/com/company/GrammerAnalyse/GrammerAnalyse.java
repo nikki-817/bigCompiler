@@ -178,8 +178,93 @@ public class GrammerAnalyse {
         }
     }
 
+    private Pair<Optional<Exception>, Integer> AnalyseVariableDeclaration(String funcName) {
+        globalFunctions function = table.getGlobalFunc(funcName);
+        int count = function.getCount();
+        while (true) {
+            boolean isConstant = false;
+            // 预读，看是不是const
+            Token next = NextToken().first.get();
+            if (next.isEOF())
+                return new Pair<>(Optional.of(new ErrEOF(next.getRowNum(), next.getColNum(), "EOF")), 0);
+            else if (next.getTokenKind() == TokenKind.CONST_KW)
+                isConstant = true;
+            else if (next.getTokenKind() != TokenKind.LET_KW){
+                UnreadToken();
+                return new Pair<>(Optional.empty(), count);
+            }
+            while (true) {
+                // 读取identifer
+                next = NextToken().first.get();
+                if (next.getTokenKind() != TokenKind.IDENT)
+                    return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "变量声明缺少标识符")), 0);
+                String tokenName = next.getValStr();
+                // 不能重复声明
+                if (table.isDuplicate(next.getValStr()))
+                    return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "重复定义")), 0);
+                //检查:
+                next = NextToken().first.get();
+                if (next.getTokenKind() != TokenKind.COLON)
+                    return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少冒号")),0);
+                //读变量类型
+                next = NextToken().first.get();
+                if(next.getTokenKind() != TokenKind.DOUBLE && next.getTokenKind() != TokenKind.INT)
+                    return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "缺少变量类型")), 0);
+                TokenKind orgType = next.getTokenKind();
+                // 预读，看看是否是'='，如果是变量可以没有，如果是常量必须得赋值
+                next = NextToken().first.get();
+                if (isConstant) {
+                    if (next.getTokenKind() != TokenKind.ASSIGN)
+                        return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "常量要赋值")), 0);
+                    // 如果是'='，分析表达式，并将结果填入符号表
+                    transInsert(tokenName, orgType, true, count);
+                    ++count;
+                    function.setCount(count);
+                    next = NextToken().first.get();
+                    if (next.getTokenKind() == TokenKind.SEMICOLON)
+                        break;
+                    return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "错误的声明")), 0);
+                } else {
+                    // 未赋值的情况
+                    if (next.getTokenKind() != TokenKind.ASSIGN) {
+                        if (next.getTokenKind() == TokenKind.SEMICOLON) {
+                            if(table.getCurrentLevel() == 0)
+                                table.insertGlobalConst(tokenName, 'I', "0", false);
+                            table.insertSymbol(tokenName, new SymbolEntry(tokenName, 0, SymbolType.VARIABLE, table.getCurrentLevel(), tokenKindSymbolTypeHashMap.get(orgType), count));
+                            ++count;
+                            function.setCount(count);
+                            int level = table.getCurrentLevel();
+                            if (level == 0){
+                                //全局变量
+                                int offset = table.getGlobalConst(tokenName).getIndex();
+                                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.GLOBA, offset, 0);
+                            }
+                            else {
+                                ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.LOCA, (long)table.findSymbol(tokenName).getOffset(), 0);
+                            }
+                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.PUSH, 0, 0);
+                            ins.pushBackInstruction(ins.getCodeOffset(), InstructionType.STORE64, 0, 0);
+                            break;
+                        }
+                        return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "错误的声明")), 0);
+                    } else {
+                        // 赋值的情况
+                        transInsert(tokenName, orgType, false, count);
+                        next = NextToken().first.get();
+                        if (next.getTokenKind() == TokenKind.SEMICOLON){
+                            ++count;
+                            function.setCount(count);
+                            break;
+                        }
+                        return new Pair<>(Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "错误的声明")), 0);
+                    }
+                }
 
-    private Optional<Exception> AnalyseIfStatement() {
+            }
+        }
+    }
+
+    private Optional<Exception> AnalyseIfStatement(String funcName) {
         // 读入if
         boolean hasParam = false;
         Token next = NextToken().first.get();
@@ -209,7 +294,7 @@ public class GrammerAnalyse {
         if(next.getTokenKind() != TokenKind.L_BRACE)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "不是代码块"));
         UnreadToken();
-        Pair<Optional<Boolean>, Optional<Exception>> err1 = AnalyseStatement();
+        Pair<Optional<Boolean>, Optional<Exception>> err1 = AnalyseStatement(funcName);
         if (err1.second.isPresent())
             return err1.second;
         // 获取跳转地址
@@ -223,7 +308,7 @@ public class GrammerAnalyse {
             UnreadToken();
             finalJmpAddr = ins.getListSize() - 1 - noCon;
         } else {
-            err1 = AnalyseStatement();
+            err1 = AnalyseStatement(funcName);
             if (err1.second.isPresent())
                 return err1.second;
             finalJmpAddr = ins.getListSize() - 1 - noCon;
@@ -294,7 +379,7 @@ public class GrammerAnalyse {
         return new Pair<>(Optional.of(falseJpc), Optional.empty());
     }
 
-    private Optional<Exception> AnalyseWhileStatement() {
+    private Optional<Exception> AnalyseWhileStatement(String funcName) {
         // 读入while
         Token next = NextToken().first.get();
         boolean hasParam = false;
@@ -327,7 +412,7 @@ public class GrammerAnalyse {
         if(next.getTokenKind() != TokenKind.L_BRACE)
             return Optional.of(new GrammerError(next.getRowNum(), next.getColNum(), "不是代码块"));
         UnreadToken();
-        Pair<Optional<Boolean>, Optional<Exception>> err1 = AnalyseStatement();
+        Pair<Optional<Boolean>, Optional<Exception>> err1 = AnalyseStatement(funcName);
         if (err1.second.isPresent())
             return err1.second;
         // 无条件跳回循环开始处
@@ -453,7 +538,7 @@ public class GrammerAnalyse {
 
 
     // 看返回的GrammerError中stop是否是true判断是否结束语句
-    private Pair<Optional<Boolean>, Optional<Exception>> AnalyseStatement() {
+    private Pair<Optional<Boolean>, Optional<Exception>> AnalyseStatement(String funcName) {
         // 预读
         Token next = NextToken().first.get();
         TokenKind type = next.getTokenKind();
@@ -461,13 +546,13 @@ public class GrammerAnalyse {
         switch (type) {
             case IF_KW:
                 UnreadToken();
-                err = AnalyseIfStatement();
+                err = AnalyseIfStatement(funcName);
                 if (err.isPresent())
                     return new Pair<>(Optional.of(false), Optional.of(err.get()));
                 break;
             case WHILE_KW:
                 UnreadToken();
-                err = AnalyseWhileStatement();
+                err = AnalyseWhileStatement(funcName);
                 if (err.isPresent())
                     return new Pair<>(Optional.of(false), Optional.of(err.get()));
                 break;
@@ -482,10 +567,10 @@ public class GrammerAnalyse {
                 break;
             case L_BRACE:
                 table.nextLevel();
-                err = AnalyseVariableDeclaration().first;
+                err = AnalyseVariableDeclaration(funcName).first;
                 if (err.isPresent())
                     return new Pair<>(Optional.of(false), Optional.of(err.get()));
-                err = AnalyseStatementSequence();
+                err = AnalyseStatementSequence(funcName);
                 if (err.isPresent())
                     return new Pair<>(Optional.of(false), Optional.of(err.get()));
                 // 看是否是右括号
@@ -712,9 +797,9 @@ public class GrammerAnalyse {
         return Optional.empty();
     }
 
-    private Optional<Exception> AnalyseStatementSequence() {
+    private Optional<Exception> AnalyseStatementSequence(String funcName) {
         while (true) {
-            Pair<Optional<Boolean>, Optional<Exception>> err = AnalyseStatement();
+            Pair<Optional<Boolean>, Optional<Exception>> err = AnalyseStatement(funcName);
             if (err.second.isPresent())
                 return Optional.of(err.second.get());
             else if (err.first.isPresent() && err.first.get())
@@ -1010,7 +1095,7 @@ public class GrammerAnalyse {
             table.insertGlobalFunc(funcName, arg.first.get().size(), table.getCurrentLevel(), arg.first.get(), 0, rtn_type);
             context = table.getGlobalFunc(funcName);
             context.setCount(a.second);
-            re = AnalyseStatementSequence();
+            re = AnalyseStatementSequence(funcName);
             if (re.isPresent())
                 return re;
             next = NextToken().first.get();
