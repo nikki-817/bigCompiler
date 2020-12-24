@@ -33,6 +33,9 @@ public class GrammerAnalyse {
         TokenAnalyse tokenAnalyse = new TokenAnalyse(pathname);
         Pair<Optional<Token>, Optional<Exception>> tk = tokenAnalyse.NextToken();
         while (!tk.second.isPresent()) {
+            if (tk.first.get().getTokenKind() == TokenKind.DOUBLE){
+                System.exit(-1);
+            }
             tkList.add(tk.first.get());
             //System.out.println(tk.first.get().getTokenKind() + " " + tk.first.get().getValStr() + " " + tk.first.get().getValInt());
             tk = tokenAnalyse.NextToken();
@@ -174,6 +177,7 @@ public class GrammerAnalyse {
             }
         }
     }
+
 
     private Optional<Exception> AnalyseIfStatement() {
         // 读入if
